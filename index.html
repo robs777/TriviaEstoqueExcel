@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Controle de Estoque Cloud</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 900px; margin: 30px auto; background: #f0f2f5; padding: 20px; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .form-group { display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; margin-bottom: 20px; }
+        input, button { padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background: #007bff; color: white; }
+        .qtd-badge { font-weight: bold; padding: 5px 10px; border-radius: 20px; background: #e9ecef; }
+        .btn-add { background: #28a745; color: white; border: none; }
+        .btn-out { background: #dc3545; color: white; border: none; }
+        .btn-del { background: #6c757d; color: white; border: none; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📦 Novo Equipamento</h2>
+    <form id="formEstoque" class="form-group">
+        <input type="text" id="nome" placeholder="Nome do Equipamento" required>
+        <input type="text" id="descricao" placeholder="Descrição/Marca" required>
+        <input type="number" id="qtdInicial" placeholder="Qtd Inicial" value="0">
+        <button type="submit" class="btn-add">Cadastrar</button>
+    </form>
+
+    <hr>
+
+    <h2>📊 Inventário em Tempo Real</h2>
+    <table id="tabelaEstoque">
+        <thead>
+            <tr>
+                <th>Equipamento</th>
+                <th>Descrição</th>
+                <th>Qtd Atual</th>
+                <th>Movimentação</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+    const API_URL = "SUA_URL_DO_GOOGLE_APPS_SCRIPT";
+
+    async function carregarEstoque() {
+        const res = await fetch(API_URL);
+        const dados = await res.json();
+        const tbody = document.querySelector("#tabelaEstoque tbody");
+        tbody.innerHTML = "";
+
+        dados.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${item.NomeEquipamento}</strong></td>
+                    <td>${item.Descricao}</td>
+                    <td><span class="qtd-badge">${item.QTDEstoque}</span></td>
+                    <td>
+                        <button class="btn-add" onclick="alterarEstoque('${item.ID}', 1)">+1</button>
+                        <button class="btn-out" onclick="alterarEstoque('${item.ID}', -1)">-1</button>
+                    </td>
+                    <td>
+                        <button class="btn-del" onclick="deletar('${item.ID}')">Excluir</button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    async function alterarEstoque(id, valor) {
+        await fetch(API_URL, {
+            method: "POST",
+            body: JSON.stringify({ action: "update_stock", id: id, movimentacao: valor })
+        });
+        carregarEstoque();
+    }
+
+    document.getElementById("formEstoque").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const nome = document.getElementById("nome").value;
+        const descricao = document.getElementById("descricao").value;
+        const qtd = document.getElementById("qtdInicial").value;
+
+        await fetch(API_URL, {
+            method: "POST",
+            body: JSON.stringify({ action: "create", nome, descricao, qtd })
+        });
+
+        document.getElementById("formEstoque").reset();
+        carregarEstoque();
+    });
+
+    async function deletar(id) {
+        if(confirm("Remover este item do sistema?")) {
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "delete", id }) });
+            carregarEstoque();
+        }
+    }
+
+    carregarEstoque();
+</script>
+
+</body>
+</html>
