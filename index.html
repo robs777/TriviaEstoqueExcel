@@ -46,62 +46,93 @@
 </div>
 
 <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbyc0Go2LcVQv49xFaCOuKbgKIdgz6U_fUAOjipiGZvtA-_dZ6UNyvW1PY0HjktSVjc7Tg/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbyVooUtYkSw9FKHmK3_HKbF36aDdY5S9BUNgBf3cp37-GRRAjgwTQ2rjNDQqRY7sHSEJA/exec";
 
-    async function carregarEstoque() {
-        const res = await fetch(API_URL);
-        const dados = await res.json();
-        const tbody = document.querySelector("#tabelaEstoque tbody");
-        tbody.innerHTML = "";
+    // 1. CARREGAR DADOS (Sincronização Inicial)
+async function carregarEstoque() {
+    const res = await fetch(API_URL);
+    const dados = await res.json();
+    renderizarTabela(dados);
+}
 
-        dados.forEach(item => {
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${item.NomeEquipamento}</strong></td>
-                    <td>${item.Descricao}</td>
-                    <td><span class="qtd-badge">${item.QTDEstoque}</span></td>
-                    <td>
-                        <button class="btn-add" onclick="alterarEstoque('${item.ID}', 1)">+1</button>
-                        <button class="btn-out" onclick="alterarEstoque('${item.ID}', -1)">-1</button>
-                    </td>
-                    <td>
-                        <button class="btn-del" onclick="deletar('${item.ID}')">Excluir</button>
-                    </td>
-                </tr>`;
-        });
-    }
+function renderizarTabela(dados) {
+    const tbody = document.querySelector("#tabelaEstoque tbody");
+    tbody.innerHTML = "";
+    dados.forEach(item => {
+        tbody.innerHTML += `
+            <tr id="row-${item.ID}">
+                <td><strong>${item.NomeEquipamento}</strong></td>
+                <td>${item.Descricao}</td>
+                <td><span class="qtd-badge">${item.QTDEstoque}</span></td>
+                <td>
+                    <button class="btn-add" onclick="alterarEstoque('${item.ID}', 1)">+1</button>
+                    <button class="btn-out" onclick="alterarEstoque('${item.ID}', -1)">-1</button>
+                </td>
+                <td><button class="btn-del" onclick="deletar('${item.ID}')">Excluir</button></td>
+            </tr>`;
+    });
+}
 
-    async function alterarEstoque(id, valor) {
-        await fetch(API_URL, {
-            method: "POST",
-            body: JSON.stringify({ action: "update_stock", id: id, movimentacao: valor })
-        });
-        carregarEstoque();
-    }
+// 2. ALTERAR ESTOQUE (MÓDULO INSTANTÂNEO)
+function alterarEstoque(id, valor) {
+    // Localiza os elementos na tela
+    const linha = document.getElementById(`row-${id}`);
+    const badge = linha.querySelector('.qtd-badge');
+    
+    // Atualização Otimista (Visual)
+    let qtdAtual = parseInt(badge.innerText);
+    let novaQtd = Math.max(0, qtdAtual + valor);
+    badge.innerText = novaQtd; 
 
-    document.getElementById("formEstoque").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const nome = document.getElementById("nome").value;
-        const descricao = document.getElementById("descricao").value;
-        const qtd = document.getElementById("qtdInicial").value;
+    // Envia para o Google em segundo plano (sem travar o usuário)
+    fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "update_stock", id: id, movimentacao: valor })
+    }).catch(err => {
+        console.error("Erro na sincronização:", err);
+        alert("Erro ao salvar! Sincronizando dados reais...");
+        carregarEstoque(); // Se der erro, volta ao valor real da planilha
+    });
+}
 
-        await fetch(API_URL, {
-            method: "POST",
-            body: JSON.stringify({ action: "create", nome, descricao, qtd })
-        });
+// 3. CADASTRAR NOVO (Aqui mantemos o await para limpar o form no tempo certo)
+document.getElementById("formEstoque").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    btn.innerText = "Enviando...";
+    btn.disabled = true;
 
-        document.getElementById("formEstoque").reset();
-        carregarEstoque();
+    const nome = document.getElementById("nome").value;
+    const descricao = document.getElementById("descricao").value;
+    const qtd = document.getElementById("qtdInicial").value;
+
+    await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "create", nome, descricao, qtd })
     });
 
-    async function deletar(id) {
-        if(confirm("Remover este item do sistema?")) {
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "delete", id }) });
-            carregarEstoque();
-        }
-    }
-
+    document.getElementById("formEstoque").reset();
+    btn.innerText = "Cadastrar";
+    btn.disabled = false;
     carregarEstoque();
+});
+
+// 4. DELETAR (Otimista)
+function deletar(id) {
+    if(!confirm("Remover item?")) return;
+    
+    // Remove da tela na hora
+    document.getElementById(`row-${id}`).style.opacity = "0.3";
+    
+    fetch(API_URL, { 
+        method: "POST", 
+        body: JSON.stringify({ action: "delete", id }) 
+    }).then(() => {
+        document.getElementById(`row-${id}`).remove();
+    });
+}
+
+carregarEstoque();
 </script>
 
 </body>
